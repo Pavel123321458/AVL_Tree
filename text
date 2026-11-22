@@ -1,0 +1,5 @@
+g++ main.cpp -o main && ./main
+
+g++ tests.cpp -o tests -lgtest -lgtest_main -pthread
+
+g++ tests.cpp -o tests -lgtest -lgtest_main -pthread && ./tests
