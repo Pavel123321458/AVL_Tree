@@ -1,20 +1,27 @@
+
 #pragma once
+
 #include <iostream>
 #include "UnqPtr.h"
 #include <algorithm>
 #include <cstddef>
+#include <utility>
 
 namespace my_labs {
 
 template <typename T>
+struct TreePrinter;
+
+template <typename T>
 class Avl_tree {
 private:
+    friend struct TreePrinter<T>;
+
     struct Node {
         T value;
         UnqPtr<Node> left;
         UnqPtr<Node> right;
         int height;
-
         Node(const T& val) : value(val), height(1) {}
     };
 
@@ -60,7 +67,7 @@ private:
         if (!node.get()) return;
         updateHeight(node.get());
         int bal = getBalance(node.get());
-        
+
         if (bal > 1) {
             if (getBalance(node->right.get()) < 0) {
                 rotateRight(node->right);
@@ -82,17 +89,19 @@ private:
         }
 
         bool added = false;
+
         if (value < node->value) {
             added = insert_node(node->left, value);
         } else if (value > node->value) {
             added = insert_node(node->right, value);
         } else {
-            return false; 
+            return false;
         }
 
         if (added) {
             balance(node);
         }
+
         return added;
     }
 
@@ -106,46 +115,48 @@ private:
     bool contains_node(Node* node, const T& value) const {
         if (!node) return false;
         if (value == node->value) return true;
-        if (value < node->value) return contains_node(node->left.get(), value);
+
+        if (value < node->value)
+            return contains_node(node->left.get(), value);
+
         return contains_node(node->right.get(), value);
     }
 
-        bool erase_node(UnqPtr<Node>& node, const T& value) {
-            if (!node.get()) return false;
+    bool erase_node(UnqPtr<Node>& node, const T& value) {
+        if (!node.get()) return false;
+        bool removed = false;
 
-            bool removed = false;
-            bool node_deleted = false; // <-- Новый флаг
+        if (value > node->value) {
+            removed = erase_node(node->right, value);
+        } else if (value < node->value) {
+            removed = erase_node(node->left, value);
+        } else {
+            removed = true;
 
-            if (value > node->value) {
-                removed = erase_node(node->right, value);
-            } else if (value < node->value) {
-                removed = erase_node(node->left, value);
+            if (!node->left.get()) {
+                UnqPtr<Node> child = std::move(node->right);
+                node = std::move(child);
+            } else if (!node->right.get()) {
+                UnqPtr<Node> child = std::move(node->left);
+                node = std::move(child);
             } else {
-                removed = true;
-                --tree_size;
+                Node* minNode = node->right.get();
 
-                if (!node->left.get()) {
-                    node = std::move(node->right);
-                    node_deleted = true; // <-- Узел удален, память освобождена
-                } else if (!node->right.get()) {
-                    node = std::move(node->left);
-                    node_deleted = true; // <-- Узел удален
-                } else {
-                    Node* minNode = node->right.get();
-                    while (minNode->left.get()) {
-                        minNode = minNode->left.get();
-                    }
-                    T minValue = minNode->value;
-                    node->value = minValue;
-                    erase_node(node->right, minValue);
+                while (minNode->left.get()) {
+                    minNode = minNode->left.get();
                 }
-            }
 
-            // Балансируем, только если узел не был удален (в нем есть данные)
-            if (removed && !node_deleted && node.get()) {
-                balance(node);
+                T minValue = minNode->value;
+                node->value = minValue;
+                erase_node(node->right, minValue);
             }
-            return removed;
+        }
+
+        if (removed && node.get()) {
+            balance(node);
+        }
+
+        return removed;
     }
 
     template <typename Func>
@@ -158,11 +169,19 @@ private:
 
 public:
     Avl_tree() = default;
-    
-    size_t size() const { return tree_size; }
-    bool empty() const { return tree_size == 0; }
-    int height() const { return getHeight(root); }
-    
+
+    size_t size() const {
+        return tree_size;
+    }
+
+    bool empty() const {
+        return tree_size == 0;
+    }
+
+    int height() const {
+        return getHeight(root);
+    }
+
     bool insert(const T& value) {
         return insert_node(root, value);
     }
@@ -177,7 +196,9 @@ public:
     }
 
     bool erase(const T& value) {
-        return erase_node(root, value);
+        if (!erase_node(root, value)) return false;
+        --tree_size;
+        return true;
     }
 
     template <typename Func>
@@ -185,34 +206,38 @@ public:
         for_each_node(root.get(), action);
     }
 
-
-
     template <typename Func>
     Avl_tree map(Func transform) const {
         Avl_tree result;
+
         for_each([&result, &transform](const T& val) {
             result.insert(transform(val));
         });
+
         return result;
     }
 
     template <typename Predicate>
     Avl_tree where(Predicate predicate) const {
         Avl_tree result;
+
         for_each([&result, &predicate](const T& val) {
             if (predicate(val)) {
                 result.insert(val);
             }
         });
+
         return result;
     }
 
     template <typename Accumulator, typename Func>
     Accumulator reduce(Accumulator initial, Func combine) const {
         Accumulator result = initial;
+
         for_each([&result, &combine](const T& val) {
             result = combine(result, val);
         });
+
         return result;
     }
 };
